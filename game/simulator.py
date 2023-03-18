@@ -1,25 +1,24 @@
 import numpy as np
+from typing import List, Tuple
+from data.generator import DemandGenerator
 
-
-seasons = [1, 2, 3, 4]
-default_market_seasons = [1] * 13 + [2] * 13 + [3] * 13 + [4] * 13
 YEAR_WEEKS = 52
 
 
 class PricingGame:
     def __init__(
         self,
-        demand_generator,
-        num_products,
-        seed=12345,
-        num_weeks=YEAR_WEEKS,
-        min_price=10.0,
-        max_price=200.0,
-        min_cogs=0.4,
-        max_cogs=0.9,
-        max_initial_stock=1000,
-        profit_lack_penalty=10.0,
-        target_profit_ratio=0.05,
+        demand_generator: DemandGenerator,
+        num_products: int,
+        seed: int = 12345,
+        num_weeks: int = YEAR_WEEKS,
+        min_price: float = 10.0,
+        max_price: float = 200.0,
+        min_cogs: float = 0.4,
+        max_cogs: float = 0.9,
+        max_initial_stock: int = 1000,
+        profit_lack_penalty: float = 10.0,
+        target_profit_ratio: float = 0.05,
     ):
         self.demand_generator = demand_generator
         self.num_products = num_products
@@ -34,7 +33,7 @@ class PricingGame:
         self.target_profit_ratio = target_profit_ratio
         self.reset_game(seed)
 
-    def reset_game(self, seed):
+    def reset_game(self, seed: int):
         # set new seed
         self.seed = seed
         np.random.seed(seed)
@@ -65,7 +64,7 @@ class PricingGame:
         self.demand_generator.set_products(self.num_products, self.article_season_start, self.article_season_end, seed)
 
     # discounts - array of chosen discounts, returns sales, revenue, profit
-    def play_prices(self, discounts):
+    def play_prices(self, discounts: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         # 1 update week and online statuses
         self.current_cw += 1
         self._update_online_status()
@@ -95,7 +94,7 @@ class PricingGame:
     def get_history(self):
         pass
 
-    def get_kpis(self):
+    def get_kpis(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         return self.sales, self.stocks, self.revenues, self.profits, self.sdrs
 
     def get_final_score(self):
@@ -112,4 +111,4 @@ class PricingGame:
 
         score = total_revenue - penalty
 
-        return score, total_revenue, total_profit, penalty, revenue, profit, residual_revenue, residual_profit
+        return score, total_revenue, total_profit, penalty, residual_revenue, residual_profit

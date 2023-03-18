@@ -3,37 +3,35 @@ import pandas as pd
 from typing import Tuple
 
 
-seasons = [1, 2, 3, 4]
-default_market_seasons = [1] * 13 + [2] * 13 + [3] * 13 + [4] * 13
+DISCOUNT_PERCENT = 100.0
 
 
 class DemandGenerator:
-    def compute_sale(self, discounts):
+    def compute_sale(self, discounts: np.ndarray):
         raise NotImplementedError()
 
-    def set_products(self, num_products, article_season_start, article_season_end):
+    def set_products(self, num_products: int, article_season_start: np.ndarray, article_season_end: np.ndarray):
         raise NotImplementedError()
 
 
 class SimpleDemandGenerator(DemandGenerator):
     def __init__(
         self,
-        max_unexplained_noise_sd=0.3,
-        mu_elasticity=-3.0,
-        sd_elasticity=1.5,
-        base_demand_mean=30,
-        base_demand_sd=15,
-        seed=12345,
+        max_unexplained_noise_sd: float = 0.3,
+        mu_elasticity: float = -3.0,
+        sd_elasticity: float = 1.5,
+        base_demand_mean: float = 30,
+        base_demand_sd: float = 15,
     ):
-        np.random.seed(seed)
-
         self.max_unexplained_noise_sd = max_unexplained_noise_sd
         self.mu_elasticity = mu_elasticity
         self.sd_elasticity = sd_elasticity
         self.base_demand_mean = base_demand_mean
         self.base_demand_sd = base_demand_sd
 
-    def set_products(self, num_products, article_season_start, article_season_end, seed):
+    def set_products(
+        self, num_products: int, article_season_start: np.ndarray, article_season_end: np.ndarray, seed: int
+    ):
         np.random.seed(seed)
 
         self.article_season_start = article_season_start
@@ -44,9 +42,11 @@ class SimpleDemandGenerator(DemandGenerator):
         self.elasticities = np.random.normal(self.mu_elasticity, self.sd_elasticity, num_products)
         self.seasonality_factors = np.random.uniform(0.0, 0.9, num_products)
 
-    def compute_sale(self, discounts, online_status, current_cw, stocks):
+    def compute_sale(self, discounts: np.ndarray, online_status: np.ndarray, current_cw: int, stocks: np.ndarray):
         basic_demand = (
-            self.base_demands * (1 - discounts / 100.0) ** self.elasticities * online_status[current_cw - 1].astype(int)
+            self.base_demands
+            * (1 - discounts / DISCOUNT_PERCENT) ** self.elasticities
+            * online_status[current_cw - 1].astype(int)
         )  # 0 if not online
         demand_with_noise = basic_demand + basic_demand * np.random.normal(loc=0, scale=self.unexplained_noise_sd)
 
