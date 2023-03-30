@@ -17,7 +17,7 @@ class DemandGenerator:
 class SimpleDemandGenerator(DemandGenerator):
     def __init__(
         self,
-        max_unexplained_noise_sd: float = 0.3,
+        max_unexplained_noise_sd: float = 0.1,
         mu_elasticity: float = -3.0,
         sd_elasticity: float = 1.5,
         base_demand_mean: float = 30,
