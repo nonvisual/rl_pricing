@@ -5,5 +5,5 @@ import numpy as np
 
 class GeneralAgent:
     # returns set of discounts
-    def act(game: PricingGame) -> np.ndarray:
+    def act(game: PricingGame, obs) -> np.ndarray:
         pass

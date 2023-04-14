@@ -1,0 +1,11 @@
+{
+    "python.autoComplete.extraPaths": [],
+    "python.analysis.extraPaths": [
+        "/home/vfux/Repositories/rl_pricing/"
+    ],
+    "python.testing.pytestArgs": [
+        "tests"
+    ],
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true
+}

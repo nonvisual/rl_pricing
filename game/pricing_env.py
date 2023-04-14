@@ -54,12 +54,8 @@ class PricingGameEnv(gym.Env):
                 "black_prices": spaces.Box(low=0, high=np.inf, shape=(self.num_products,), dtype=np.float32),
                 "cogs": spaces.Box(low=0, high=np.inf, shape=(self.num_products,), dtype=np.float32),
                 "residual_value": spaces.Box(low=0, high=np.inf, shape=(self.num_products,), dtype=np.float32),
-                "article_season_start": spaces.Box(
-                    low=0, high=self.max_initial_stock, shape=(self.num_products,), dtype=np.int32
-                ),
-                "article_season_end": spaces.Box(
-                    low=0, high=self.max_initial_stock, shape=(self.num_products,), dtype=np.int32
-                ),
+                "article_season_start": spaces.Box(low=0, high=YEAR_WEEKS, shape=(self.num_products,), dtype=np.int32),
+                "article_season_end": spaces.Box(low=0, high=YEAR_WEEKS, shape=(self.num_products,), dtype=np.int32),
                 "shipment_costs": spaces.Box(low=0, high=np.inf, shape=(1,), dtype=np.float32),
                 "stocks": spaces.Box(low=0, high=self.max_initial_stock, shape=(self.num_products,), dtype=np.int32),
                 "online_status": spaces.Box(low=0, high=1, shape=(self.num_products,), dtype=np.int32),
@@ -117,7 +113,7 @@ class PricingGameEnv(gym.Env):
 
         # 2 compute sales
         sales = self.demand_generator.compute_sale(discounts, self.online_status, self.current_cw, self.stocks)
-        stocks = self.stocks[self.current_cw - 1] - sales
+        stocks = self.stocks[-1] - sales
 
         revenue = self.black_prices * (1 - discounts / 100.0) * sales
         profit = (self.black_prices * (1 - discounts / 100.0) - self.cogs - self.shipment_costs) * sales
@@ -126,7 +122,7 @@ class PricingGameEnv(gym.Env):
 
     def seed(self, seed):
         if not seed:
-            seed = np.random.randint(0, 2**32 - 1)
+            seed = 12345  # jnp.random.randint(0, 2**32 - 1)
         np.random.seed(seed)
         self.current_seed = seed
         return seed
@@ -158,7 +154,7 @@ class PricingGameEnv(gym.Env):
 
         self.article_season_end = np.clip(
             self.article_season_start + np.random.choice(range(12, 30), size=self.num_products), 0, YEAR_WEEKS
-        )
+        ).astype(int)
         self.product_names = [f"product{i+1}" for i in range(self.num_products)]
         self.initial_stocks = np.random.uniform(0, self.max_initial_stock, self.num_products).astype(int)
         self.shipment_costs = self.min_price / 2

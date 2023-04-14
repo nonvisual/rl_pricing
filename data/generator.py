@@ -57,7 +57,7 @@ class SimpleDemandGenerator(DemandGenerator):
             )
         )
 
-        return np.clip(demand_with_noise + demand_seasonality, 0, stocks[current_cw - 1]).astype(int)
+        return np.clip(demand_with_noise + demand_seasonality, 0, stocks[-1]).astype(int)
 
     def visualize_demands(self, points: int = 20, article_index: Optional[int] = None):
         num_articles = len(self.base_demands)

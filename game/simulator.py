@@ -1,6 +1,7 @@
 import numpy as np
 from typing import List, Tuple
 from data.generator import DemandGenerator
+from game.state import GameState
 
 YEAR_WEEKS = 52
 
@@ -16,7 +17,7 @@ class PricingGame:
         max_price: float = 200.0,
         min_cogs: float = 0.4,
         max_cogs: float = 0.9,
-        max_initial_stock: int = 1000,
+        max_initial_stock: int = 2000,
         profit_lack_penalty: float = 10.0,
         target_profit_ratio: float = 0.05,
     ):
@@ -61,10 +62,10 @@ class PricingGame:
         self.profits = []
         self.sdrs = []
 
-        self.demand_generator.set_products(self.num_products, self.article_season_start, self.article_season_end, seed)
+        self.demand_generator.set_products(self.num_products, self.article_season_start, self.article_season_end)
 
     # discounts - array of chosen discounts, returns sales, revenue, profit
-    def play_prices(self, discounts: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def play_prices(self, discounts: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         # 1 update week and online statuses
         self.current_cw += 1
         self._update_online_status()
@@ -82,20 +83,16 @@ class PricingGame:
         self.revenues.append(revenue)
         self.profits.append(profit)
         self.sdrs.append(sdr)
-        return sales, stocks, self.online_status[self.current_cw - 1]
+        return sales, stocks, self.online_status[self.current_cw - 1], revenue, profit
 
     def _update_online_status(self):
-        new_status = np.array([(self.current_cw >= self.article_season_start[i]) for i in range(self.num_products)])
+        new_status = np.array(
+            [True for i in range(self.num_products)]
+        )  # np.array([(self.current_cw >= self.article_season_start[i]) for i in range(self.num_products)])
         self.online_status.append(new_status)
 
-    def get_state(self):
-        pass
-
-    def get_history(self):
-        pass
-
-    def get_kpis(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-        return self.sales, self.stocks, self.revenues, self.profits, self.sdrs
+    def get_state(self) -> GameState:
+        return GameState(self.profits, self.revenues, self.sales, self.sdrs, self.discounts)
 
     def get_final_score(self):
         revenue = sum([r.sum() for r in self.revenues])
