@@ -29,6 +29,7 @@ class PricingGameEnv(gym.Env):
         max_initial_stock: int = 2000,
         profit_lack_penalty: float = 10.0,
         target_profit_ratio: float = 0.05,
+        mu_residual_value=0.3,
     ):
         super().__init__()
 
@@ -43,6 +44,7 @@ class PricingGameEnv(gym.Env):
         self.max_initial_stock = max_initial_stock
         self.profit_lack_penalty = profit_lack_penalty
         self.target_profit_ratio = target_profit_ratio
+        self.mu_residual_value = mu_residual_value
         # dself.reset_game(seed)
 
         # Define observation and action spaces
@@ -72,8 +74,6 @@ class PricingGameEnv(gym.Env):
         self.reset_game(seed)
         obs = self._get_observation()
         return obs
-
-        # discounts - array of chosen discounts, returns sales, revenue, profit
 
     def _update_online_status(self):
         new_status = np.array(
@@ -113,6 +113,8 @@ class PricingGameEnv(gym.Env):
 
         # 2 compute sales
         sales = self.demand_generator.compute_sale(discounts, self.online_status, self.current_cw, self.stocks)
+        # no sales if status is offline
+        sales[~self.online_status[-1]] = 0.0
         stocks = self.stocks[-1] - sales
 
         revenue = self.black_prices * (1 - discounts / 100.0) * sales
@@ -134,7 +136,9 @@ class PricingGameEnv(gym.Env):
         # re-initialize article information
         self.black_prices = np.random.uniform(self.min_price, self.max_price, self.num_products)
         self.cogs = np.random.uniform(self.min_cogs, self.max_cogs, self.num_products) * self.black_prices
-        self.residual_value = np.clip(np.random.normal(0.4, 0.3, self.num_products), 0.0, 1.0) * self.black_prices
+        self.residual_value = (
+            np.clip(np.random.normal(self.mu_residual_value, 0.2, self.num_products), 0.0, 1.0) * self.black_prices
+        )
 
         # model 2 big seasons
         season_peak_1 = 3
@@ -176,7 +180,6 @@ class PricingGameEnv(gym.Env):
         assert self.action_space.contains(action), f"Invalid action: {action}"
 
         sales, stocks, online_status, revenue, profit, sdr = self._play_prices(action)
-        done = self.current_cw >= self.num_weeks
         info = {"week": self.current_cw}
 
         # Update game history
@@ -189,21 +192,22 @@ class PricingGameEnv(gym.Env):
         self.sdrs.append(sdr)
 
         # Calculate reward
+        # reward is sum of realized
+        season_is_done = (self.current_cw >= self.article_season_end).astype(int)
 
-        if done:
-            residual_revenue = (self.stocks[-1] * self.black_prices).sum()
-            residual_profit = (self.stocks[-1] * (self.black_prices - self.cogs)).sum()
+        residual_revenue = (self.stocks[-1] * self.residual_value * season_is_done).sum()
+        residual_profit = (self.stocks[-1] * (self.residual_value - self.cogs) * season_is_done).sum()
 
-            step_revenue = revenue.sum()
-            total_revenue = sum([r.sum() for r in self.revenues]) + residual_revenue
-            total_profit = sum([p.sum() for p in self.profits]) + residual_profit
+        step_revenue = revenue.sum()
+        total_revenue = sum([r.sum() for r in self.revenues]) + residual_revenue
+        total_profit = sum([p.sum() for p in self.profits]) + residual_profit
 
-            penalty = max(0, total_revenue * self.target_profit_ratio - total_profit) * self.profit_lack_penalty
-            reward = step_revenue + residual_revenue - penalty
-        else:
-            reward = revenue.sum()
+        penalty = max(0, total_revenue * self.target_profit_ratio - total_profit) * self.profit_lack_penalty
+        reward = step_revenue + residual_revenue - penalty
 
         observations = self._get_observation()
+
+        done = self.current_cw >= self.num_weeks
 
         return observations, reward, done, info
 
