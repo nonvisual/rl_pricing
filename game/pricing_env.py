@@ -24,12 +24,12 @@ class PricingGameEnv(gym.Env):
         num_weeks: int = YEAR_WEEKS,
         min_price: float = 10.0,
         max_price: float = 200.0,
-        min_cogs: float = 0.6,
-        max_cogs: float = 0.9,
+        min_cogs: float = 0.4,
+        max_cogs: float = 0.7,
         max_initial_stock: int = 2000,
         profit_lack_penalty: float = 10.0,
         target_profit_ratio: float = 0.05,
-        mu_residual_value=0.3,
+        mu_residual_value=0.25,
     ):
         super().__init__()
 
@@ -193,21 +193,21 @@ class PricingGameEnv(gym.Env):
 
         # Calculate reward
         # reward is sum of realized
-        season_is_done = (self.current_cw >= self.article_season_end).astype(int)
+        done = self.current_cw >= self.num_weeks
 
+        season_is_done = (self.current_cw >= self.article_season_end).astype(int)
+        if done:
+            season_is_done = np.ones(len(season_is_done))
         residual_revenue = (self.stocks[-1] * self.residual_value * season_is_done).sum()
         residual_profit = (self.stocks[-1] * (self.residual_value - self.cogs) * season_is_done).sum()
 
-        step_revenue = revenue.sum()
         total_revenue = sum([r.sum() for r in self.revenues]) + residual_revenue
         total_profit = sum([p.sum() for p in self.profits]) + residual_profit
 
         penalty = max(0, total_revenue * self.target_profit_ratio - total_profit) * self.profit_lack_penalty
-        reward = step_revenue + residual_revenue - penalty
+        reward = total_revenue - penalty
 
         observations = self._get_observation()
-
-        done = self.current_cw >= self.num_weeks
 
         return observations, reward, done, info
 

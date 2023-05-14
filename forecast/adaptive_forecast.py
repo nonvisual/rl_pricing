@@ -1,6 +1,6 @@
 from math import isclose
 import numpy as np
-from base import GeneralForecast
+from forecast.base import GeneralForecast
 
 """
 Simple adaptive forecast. Starts with general assumption about article (base demand, base_elasticity) and then adapts it with obeservations 
