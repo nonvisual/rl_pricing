@@ -29,7 +29,7 @@ class PricingGameEnv(gym.Env):
         max_initial_stock: int = 2000,
         profit_lack_penalty: float = 10.0,
         target_profit_ratio: float = 0.05,
-        mu_residual_value=0.25,
+        mu_residual_value=0.2,
     ):
         super().__init__()
 
