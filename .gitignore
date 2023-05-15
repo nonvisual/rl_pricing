@@ -1,2 +1,6 @@
 *.ipynb_checkpoints/
 __pycache__/
+runs/mish_activation/
+a2c_pricing_tensorboard/
+.hypothesis/
+*.zip
