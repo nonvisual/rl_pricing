@@ -9,12 +9,18 @@ WEEKS_YEAR = 52
 
 
 class BasicORAgent(GeneralAgent):
-    def __init__(self, forecast=AdaptiveForecast(), verbose_solver=True):
+    def __init__(self, forecast=AdaptiveForecast(), include_future_articles=True, verbose_solver=True, timelimit=10):
         self.forecast = forecast
         self.verbose_solver = verbose_solver
+        self.timelimit = timelimit
+        self.include_future_articles = include_future_articles
 
-    def is_in_optimization(cw, start_dates, end_dates):
-        return np.logical_and(start_dates <= cw, cw <= end_dates)
+    def is_in_optimization(self, current_cw, cw, start_dates, end_dates):
+        in_optimization_horizon = np.logical_and(start_dates <= cw, cw <= end_dates)
+        currently_online = current_cw >= start_dates
+        if not self.include_future_articles:
+            in_optimization_horizon = np.logical_and(in_optimization_horizon, currently_online)
+        return in_optimization_horizon
 
     def create_optimization_model(self, game: PricingGame, obs, forecast_grid):
         num_products = game.num_products
@@ -28,12 +34,11 @@ class BasicORAgent(GeneralAgent):
         penalty = game.profit_lack_penalty
         shipment_costs = obs["shipment_costs"]
         stocks = obs["stocks"]
-        slack = 0.001
         num_discounts = forecast_grid.shape[1]  # number of discounts
         discount_range = np.linspace(0, 0.7, num_discounts)
 
         model = pulp.LpProblem("Revenue_Optimization", pulp.LpMaximize)
-        print(f"Create model with {num_discounts} discounts")
+
         discounts = pulp.LpVariable.dicts(
             "discount",
             [
@@ -41,7 +46,7 @@ class BasicORAgent(GeneralAgent):
                 for i in range(num_products)
                 for w in range(cw, WEEKS_YEAR)
                 for j in range(num_discounts)
-                if BasicORAgent.is_in_optimization(w, article_season_start, article_season_end)[i]
+                if self.is_in_optimization(cw, w, article_season_start, article_season_end)[i]
             ],
             lowBound=0,
             cat="Binary",
@@ -53,7 +58,7 @@ class BasicORAgent(GeneralAgent):
                 for i in range(num_products)
                 for w in range(cw, WEEKS_YEAR)
                 for j in range(num_discounts)
-                if BasicORAgent.is_in_optimization(w, article_season_start, article_season_end)[i]
+                if self.is_in_optimization(cw, w, article_season_start, article_season_end)[i]
             ],
             lowBound=0,
             cat="Continous",
@@ -73,23 +78,26 @@ class BasicORAgent(GeneralAgent):
                 for i in range(num_products)
                 for w in range(cw, 52)
                 for j in range(num_discounts)
-                if BasicORAgent.is_in_optimization(w, article_season_start, article_season_end)[i]
+                if self.is_in_optimization(cw, w, article_season_start, article_season_end)[i]
             ]
         )
+
         # add residual value
         residual_revenue = pulp.LpVariable("residual_revenue", cat="Continuous")
-        model += residual_revenue == pulp.lpSum(
-            [stock_quantity[(i, 51)] * residual_value[i] for i in range(num_products)]
-        )
 
-        # objective
-        # model += total_revenue + residual_revenue
+        model += residual_revenue == pulp.lpSum(
+            [
+                stock_quantity[(i, 51)] * residual_value[i]
+                for i in range(num_products)
+                if (cw >= article_season_start)[i]
+            ]
+        )
 
         # profit and revenue so far
         revenue_so_far = sum([r.sum() for r in game.revenues])
 
         profit_so_far = sum([r.sum() for r in game.profits])
-        # ToDo: include season end
+
         future_profit = pulp.LpVariable("profit", cat="Continuous")
         model += future_profit == pulp.lpSum(
             [
@@ -97,12 +105,16 @@ class BasicORAgent(GeneralAgent):
                 for i in range(num_products)
                 for w in range(cw, 52)
                 for j in range(num_discounts)
-                if BasicORAgent.is_in_optimization(w, article_season_start, article_season_end)[i]
+                if self.is_in_optimization(cw, w, article_season_start, article_season_end)[i]
             ]
         )
         residual_profit = pulp.LpVariable("residual_profit", cat="Continuous")
         model += residual_profit == pulp.lpSum(
-            [stock_quantity[(i, 51)] * (residual_value[i] - cogs[i]) for i in range(num_products)]
+            [
+                stock_quantity[(i, 51)] * (residual_value[i] - cogs[i])
+                for i in range(num_products)
+                if (cw >= article_season_start)[i]
+            ]
         )
 
         profit_lack = pulp.LpVariable("profit_lack", lowBound=0.0, cat="Continuous")
@@ -110,31 +122,26 @@ class BasicORAgent(GeneralAgent):
             future_profit + residual_profit + profit_so_far
         )
 
-        # new objective TODO
+        # objective function
 
-        model += total_revenue + residual_revenue - penalty * profit_lack
-        # model += future_profit + residual_profit
+        model += total_revenue + residual_revenue + revenue_so_far - penalty * profit_lack
+
         for i in range(num_products):
             model += stock_quantity[i, cw - 1] == stocks[i]
             for w in range(cw, 52):
-                if BasicORAgent.is_in_optimization(w, article_season_start, article_season_end)[i]:
+                if self.is_in_optimization(cw, w, article_season_start, article_season_end)[i]:
                     model += pulp.lpSum([discounts[(i, w, j)] for j in range(num_discounts)]) == 1
 
                     for j in range(num_discounts):
                         model += forecast_grid[i][j] * discounts[(i, w, j)] >= sales_quantity[i, w, j]
-                    model += (
-                        stock_quantity[i, w - 1]
-                        >= pulp.lpSum(sales_quantity[i, w, j] for j in range(num_discounts)) - slack
+                    model += stock_quantity[i, w - 1] >= pulp.lpSum(
+                        sales_quantity[i, w, j] for j in range(num_discounts)
                     )
                     model += stock_quantity[i, w] == stock_quantity[i, w - 1] - pulp.lpSum(
                         sales_quantity[i, w, j] for j in range(num_discounts)
                     )
                 else:
                     model += stock_quantity[i, w] == stock_quantity[i, w - 1]
-
-                # if not is_online[i]:
-                #     model += pulp.lpSum(sales_quantity[i, w, j] for j in range(num_discounts)) <= 0.0
-                #     model += discounts[(i, w, 0)] == 1
 
         return model, discounts, sales_quantity, total_revenue, stock_quantity
 
@@ -149,7 +156,6 @@ class BasicORAgent(GeneralAgent):
         num_discounts = forecast_grid.shape[1]
         article_season_start = obs["article_season_start"]
         article_season_end = obs["article_season_end"]
-        print(num_products, num_discounts)
         if cw == 52:
             return np.zeros(num_products).astype(np.float32)
 
@@ -157,11 +163,10 @@ class BasicORAgent(GeneralAgent):
         solver = pulp.getSolver(
             "PULP_CBC_CMD",
             msg=self.verbose_solver,
-            maxSeconds=10,
-            options=["gapRel 0.05", "gapAbs 50", "timeLimit 10", "maxIts 1000"],
+            maxSeconds=self.timelimit,
+            options=["gapRel 0.05", "gapAbs 50", f"timeLimit {self.timelimit}", "maxIts 1000"],
         )
         num_vars = len(model.variables())
-        print("num_variables", num_vars)
         model.solve(solver)
         model.writeLP("my_lp_problem.lp")
 
@@ -173,7 +178,7 @@ class BasicORAgent(GeneralAgent):
         discount_values = np.zeros((forecast_grid.shape[0]))
 
         for i in range(num_products):
-            if BasicORAgent.is_in_optimization(cw, article_season_start, article_season_end)[i]:
+            if self.is_in_optimization(cw, cw, article_season_start, article_season_end)[i]:
                 discount_values[i] = sum(
                     discount_range[j] * discounts[(i, cw, j)].varValue for j in range(num_discounts)
                 )
